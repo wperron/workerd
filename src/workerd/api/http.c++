@@ -1555,8 +1555,12 @@ jsg::Promise<jsg::Ref<Response>> handleWebSocketFetchResponse(jsg::Lock& js,
     kj::Vector<kj::Url> urlList,
     kj::Own<kj::HttpClient> client,
     kj::Maybe<jsg::Ref<AbortSignal>> signal,
+    kj::Maybe<TraceContext>& traceContext,
     kj::HttpClient::WebSocketResponse response,
     kj::Maybe<kj::TimePoint> callStart) {
+  KJ_IF_SOME(ctx, traceContext) {
+    ctx.setTag("http.response.status_code"_kjc, static_cast<int64_t>(response.statusCode));
+  }
   KJ_SWITCH_ONEOF(response.webSocketOrBody) {
     KJ_CASE_ONEOF(body, kj::Own<kj::AsyncInputStream>) {
       body = body.attach(kj::mv(client));
@@ -1792,14 +1796,16 @@ jsg::Promise<jsg::Ref<Response>> fetchImplNoOutputLockAttempt(jsg::Lock& js,
         return ioContext.awaitIo(js, kj::mv(resultPromise),
               [fetcher = kj::mv(fetcher), jsRequest = kj::mv(jsRequest),
                   urlList = kj::mv(urlList), client = kj::mv(client), signal = kj::mv(signal),
-                  retryState = kj::mv(retryState), callStart](jsg::Lock& js,
+                  traceContext = kj::mv(traceContext), retryState = kj::mv(retryState), callStart](
+                  jsg::Lock& js,
                   ActorFetchAttemptResult<kj::HttpClient::WebSocketResponse>&& result) mutable
               -> jsg::Promise<jsg::Ref<Response>> {
             KJ_SWITCH_ONEOF(result) {
               KJ_CASE_ONEOF(response, kj::HttpClient::WebSocketResponse) {
               KJ_ASSERT_NONNULL(retryState)->recordRecovered();
               return handleWebSocketFetchResponse(js, kj::mv(fetcher), kj::mv(jsRequest),
-                  kj::mv(urlList), kj::mv(client), kj::mv(signal), kj::mv(response), callStart);
+                  kj::mv(urlList), kj::mv(client), kj::mv(signal), traceContext, kj::mv(response),
+                  callStart);
             }
             KJ_CASE_ONEOF(failure, ActorFetchFailure) {
               return retryActorFetch(js, kj::mv(fetcher), kj::mv(jsRequest), kj::mv(urlList),
@@ -1813,10 +1819,11 @@ jsg::Promise<jsg::Ref<Response>> fetchImplNoOutputLockAttempt(jsg::Lock& js,
     webSocketResponse = AbortSignal::maybeCancelWrap(js, signal, kj::mv(webSocketResponse));
     return ioContext.awaitIo(js, kj::mv(webSocketResponse),
         [fetcher = kj::mv(fetcher), jsRequest = kj::mv(jsRequest), urlList = kj::mv(urlList),
-            client = kj::mv(client), signal = kj::mv(signal), callStart](
+            client = kj::mv(client), signal = kj::mv(signal), traceContext = kj::mv(traceContext),
+            callStart](
             jsg::Lock& js, kj::HttpClient::WebSocketResponse&& response) mutable {
       return handleWebSocketFetchResponse(js, kj::mv(fetcher), kj::mv(jsRequest), kj::mv(urlList),
-          kj::mv(client), kj::mv(signal), kj::mv(response), callStart);
+          kj::mv(client), kj::mv(signal), traceContext, kj::mv(response), callStart);
     });
   } else {
     kj::Maybe<kj::HttpClient::Request> nativeRequest;

@@ -315,6 +315,16 @@ wd_test(
 )
 
 wd_test(
+    src = "fetch-instrumentation-test.wd-test",
+    args = ["--experimental"],
+    data = [
+        "fetch-instrumentation-test-worker.js",
+        "fetch-instrumentation-test.js",
+        "instrumentation-tail-worker.js",
+    ],
+)
+
+wd_test(
     src = "cf-cache-control-test.wd-test",
     data = ["cf-cache-control-test.js"],
 )
